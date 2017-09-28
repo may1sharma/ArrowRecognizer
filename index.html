@@ -16,27 +16,57 @@
 
     // The interpretation will automatically be added to each row of csv data for you.
     // Place the function names to calculate your features here. The function name will be the header of the csv file for that row.
-    featureFunctions = [featureA, featureB, myFeature];
+    featureFunctions = [ //Format: "feature"+id+{R:Rubine,L:Long,M:Mine} 
+						feature1R, // cosine of starting angle
+						feature2R // sine of starting angle
+						//feature3R
+						];
 
     
     
     /* Define your feature functions here */
     /* Each function only needs to return the feature value */
-    
-	function featureA(sketch) {
-        console.log(sketch); // Console logging might be beneficial to see the structure.
-		/* Basic structure is as follows
+	
+	/* Basic structure is as follows
+	Input Json:
 		{
 			points: {id: {x: int, y: int, time: intString}, ...},
 			shapes: [{interpretation: string}], // Shapes should only have 1 entry and the interpretation is all you care about. Either arrow or something else
 			strokes: [{id: string, time: string, points: [pointId1, pointId2, ...]}, ...]
 		}
 		*/
-		return sketch.strokes.length;
+    
+	function feature1R(sketch) {
+        console.log(sketch.points[sketch.strokes[0].points[0]]); 
+		var i = 2;
+		var point0 = sketch.points[sketch.strokes[0].points[0]];		
+		var point2 = sketch.points[sketch.strokes[0].points[i]];
+		
+		while((parseInt(point2.time) <= parseInt(point0.time)) || ((point0.x == point2.x) && (point0.y == point2.y))) {
+			point2 = sketch.points[sketch.strokes[0].points[++i]];
+		}
+		x0 = point0.x;
+		y0 = point0.y;
+		x2 = point2.x;
+		y2 = point2.y;
+				
+		return (x2-x0)/Math.sqrt((y2-y0)*(y2-y0) + (x2-x0)*(x2-x0));
 	}
 
-	function featureB(sketch) {
-		return 2;
+	function feature2R(sketch) {
+		var i = 2;
+		var point0 = sketch.points[sketch.strokes[0].points[0]];		
+		var point2 = sketch.points[sketch.strokes[0].points[i]];
+		
+		while((parseInt(point2.time) <= parseInt(point0.time)) || ((point0.x == point2.x) && (point0.y == point2.y))) {
+			point2 = sketch.points[sketch.strokes[0].points[++i]];
+		}
+		x0 = point0.x;
+		y0 = point0.y;
+		x2 = point2.x;
+		y2 = point2.y;
+				
+		return (y2-y0)/Math.sqrt((y2-y0)*(y2-y0) + (x2-x0)*(x2-x0));
 	}
     
     function myFeature(sketch) {
