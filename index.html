@@ -68,16 +68,18 @@
 		//console.log(sketch.points);
 	}
 	
-	function calculateRD(points) { //Resampling Distance		
-		for (var key in points) {
-			if (points.hasOwnProperty(key)) {
-				var val = points[key];
-				//console.log(val);
-				if (minX > val.x) minX = val.x;
-				if (minY > val.y) minY = val.y;
-				if (maxX < val.x) maxX = val.x;
-				if (maxY < val.y) maxY = val.y;
-			}
+	function calculateRD(points) { //Resampling Distance
+		minX = Number.MAX_VALUE;
+		minY = Number.MAX_VALUE;
+		maxX = Number.MIN_VALUE;
+		maxY = Number.MIN_VALUE;
+		for (var i=0; i<points.length; i++) {
+			var val = points[i];
+			//console.log(val);
+			if (minX > val.x) minX = val.x;
+			if (minY > val.y) minY = val.y;
+			if (maxX < val.x) maxX = val.x;
+			if (maxY < val.y) maxY = val.y;
 		}
 		
 		BBlengthF3 = Math.sqrt((maxY-minY)*(maxY-minY) + (maxX-minX)*(maxX-minX));
@@ -88,19 +90,17 @@
 	function resample(sketch, S) {
 		var D = 0;
 		Spoints = []; // reinitialize for each sketch
-		var prevX = sketch.points[sketch.strokes[0].points[0]].x;
-		var prevY = sketch.points[sketch.strokes[0].points[0]].y;
+		var prevX = sketch.points[0].x;
+		var prevY = sketch.points[0].y;
 		Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}')); //Initial point
 		var val;
-		for (var key in sketch.points) {
-			if (sketch.points.hasOwnProperty(key)) {
-				val = sketch.points[key];
-				D = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));
-				if (D >= S) {
-					prevX = prevX + (val.x - prevX)*(S/D);
-					prevY = prevY + (val.y - prevY)*(S/D);
-					Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}'));
-				}
+		for (var i=1; i<sketch.points.length; i++) {
+			val = sketch.points[i];
+			D = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));
+			if (D >= S) {
+				prevX = prevX + (val.x - prevX)*(S/D);
+				prevY = prevY + (val.y - prevY)*(S/D);
+				Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}'));
 			}
 		}
 		// Insert Last point 
@@ -157,21 +157,19 @@
     }
     
     function feature8R(sketch) {
-		var prevX = sketch.points[sketch.strokes[0].points[0]].x;
-		var prevY = sketch.points[sketch.strokes[0].points[0]].y;
-		for (var key in sketch.points) {
-			if (sketch.points.hasOwnProperty(key)) {
-				var val = sketch.points[key];
-				StrokelengthF8 = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));				
-				prevX = val.x;
-				prevY = val.y;				
-			}
+		StrokelengthF8 = 0;
+		for (var i=1; i<sketch.points.length; i++) {
+			var val = sketch.points[i];
+			var prev = sketch.points[i-1];
+			StrokelengthF8 += Math.sqrt((val.y-prev.y)*(val.y-prev.y) + (val.x-prev.x)*(val.x-prev.x));	
 		}
         return StrokelengthF8;
     }
     	
     function feature9R(sketch) {	
 		var rotation = 0;
+		absRotationF10 = 0;
+		sqRotationF11 = 0;
 		for(var i=1; i < Spoints.length-1 ; i++) {
 			delX = Spoints[i+1].x - Spoints[i].x;
 			delY = Spoints[i+1].y - Spoints[i].y;
@@ -195,36 +193,27 @@
     function feature11R(sketch) {
         return sqRotationF11;
     }
-    
-	var totalTime = 0;
 	
     function feature12R(sketch) {
-        var prevX = sketch.points[sketch.strokes[0].points[0]].x;
-		var prevY = sketch.points[sketch.strokes[0].points[0]].y;
-		var prevT = sketch.points[sketch.strokes[0].points[0]].time;
+        var prev = sketch.points[0];
 		var maxSpeed = 0;
-		for (var key in sketch.points) {
-			if (sketch.points.hasOwnProperty(key)) {
-				var val = sketch.points[key];
-				if (val.time > prevT) {
-					var speed = (Math.pow(val.x - prevX, 2) + Math.pow(val.y - prevY, 2))/ Math.pow(val.time - prevT, 2);
+		for (var i=1; i<sketch.points.length; i++) {
+				var val = sketch.points[i];
+				if (val.time > prev.time) {
+					var speed = (Math.pow(val.x - prev.x, 2) + Math.pow(val.y - prev.y, 2))/ Math.pow(val.time - prev.time, 2);
 					if (speed > maxSpeed) {
 						maxSpeed = speed;
 					}
 				} else {
-					console.log("F12: Max Speed Feature anomaly T(i) "+ val.time + " & T(i-1) " + prevT);
+					//console.log("F12: Max Speed Feature anomaly T(i) "+ val.time + " & T(i-1) " + prev.time);
 				}
-				prevX = val.x;
-				prevY = val.y;	
-				prevT = val.time;
-			}
+				prev = val;
 		}
-		totalTime = prevT - sketch.points[sketch.strokes[0].points[0]].time;
         return maxSpeed;
     }
     
     function feature13R(sketch) {
-        return totalTime;
+        return sketch.points[sketch.points.length-1].time - sketch.points[0].time;
     }
 
 
@@ -261,6 +250,8 @@
 		}
 
 		// Perform preprocessing on sketch points
+		sketch.points.sort(function(a, b){return a.time - b.time});
+		console.log(sketch.points);
 		preProcess(sketch);
 		
 		// Now just push back all the feature values in order.
@@ -317,10 +308,7 @@
 			contentType: "application/json",
 			success: function(res) {
 				var sketch = res[0]; 
-				sketch.points.sort(function(a, b){return a.time - b.time});
-				console.log(sketch.points);
-				sketch.points = arrayToObj(sketch.points);
-				console.log(sketch.points[sketch.strokes[0].points[0]]);
+				//sketch.points = arrayToObj(sketch.points);
 				document.getElementById('progress').textContent = 'Calculating features for sketch ' + counter + ' of ' + maxResults;
 				calculateFeatures(sketch);
 				getSketch();
