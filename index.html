@@ -17,19 +17,30 @@
     // The interpretation will automatically be added to each row of csv data for you.
     // Place the function names to calculate your features here. The function name will be the header of the csv file for that row.
     featureFunctions = [ //Format: "feature"+id+{R:Rubine,L:Long,O:Others} 
-						feature1R, // cosine of starting angle
-						feature2R, // sine of starting angle
-						feature3R, // Length of Bounding Box Diagonal
-						feature4R, // Angle of Bounding Box Diagonal
-						feature5R, // Start and Endpoint Distance
-						feature6R, // cosine of Angle from Start to Endpoint
-						feature7R, // sine of Angle from Start to Endpoint
-						feature8R, // Stroke Length
-						feature9R, // Total rotational change in a stroke
-						feature10R,// Absolute rotational change in a stroke
-						feature11R,// Smoothness/ Squared rotational change of the stroke.
-						feature12R,// Maximum speed
-						feature13R // Total Time
+						feature1R, 	//	cosine of starting angle
+						feature2R,	// 	sine of starting angle
+						feature3R, 	// 	Length of Bounding Box Diagonal
+						feature4R, 	// 	Angle of Bounding Box Diagonal
+						feature5R, 	// 	Start and Endpoint Distance
+						feature6R, 	// 	cosine of Angle from Start to Endpoint
+						feature7R, 	// 	sine of Angle from Start to Endpoint
+						feature8R, 	// 	Stroke Length
+						feature9R, 	// 	Total rotational change in a stroke
+						feature10R,	// 	Absolute rotational change in a stroke
+						feature11R,	// 	Smoothness/ Squared rotational change of the stroke.
+						feature12R,	// 	Maximum speed
+						feature13R, // 	Total Time
+						feature14L,	//	Aspect [abs(Pi/4 - F4)]
+						feature15L,	//	Curviness
+						feature16L,	//	Total angle traversed / total length
+						feature17L,	//	Density metric 1 [F8 / F5]
+						feature18L,	//	Density metric 2 [F8 / F3]
+						feature19L,	//	Non-subjective openness [F5 / F3]
+						feature20L,	//	Area of bounding box
+						feature21L,	//	Log(area)
+						feature22L,	//	Total angle / total absolute angle [F9 / F10]
+						feature23L,	//	Log(total length)
+						feature24L	//	Log(aspect)
 						];
 
     
@@ -54,6 +65,7 @@
 	var maxY = Number.MIN_VALUE;
 	var S2ElengthF5 = 0; // Start to Endpoint distance	
 	var StrokelengthF8 = 0;
+	var rotationF9 = 0
 	var absRotationF10 = 0;
 	var sqRotationF11 = 0;
 		
@@ -167,7 +179,7 @@
     }
     	
     function feature9R(sketch) {	
-		var rotation = 0;
+		rotationF9 = 0;
 		absRotationF10 = 0;
 		sqRotationF11 = 0;
 		for(var i=1; i < Spoints.length-1 ; i++) {
@@ -178,12 +190,12 @@
 			// Math.atan2(y,x) takes care of corner cases for +Pi/2 & -Pi/2
 			var val = Math.atan2(delXprev*delY - delX*delYprev, delX*delXprev + delY*delYprev);
 			if (!isNaN(val)) {
-				rotation += val;
+				rotationF9 += val;
 				absRotationF10 += Math.abs(val);
 				sqRotationF11 += Math.pow(val,2);
 			}
 		}
-        return rotation;
+        return rotationF9;
     }
     
     function feature10R(sketch) {
@@ -216,7 +228,63 @@
         return sketch.points[sketch.points.length-1].time - sketch.points[0].time;
     }
 
+	function feature14L(sketch) {
+        return Math.abs(Math.PI/4 - feature4R(sketch));
+    }
 
+	function feature15L(sketch) {
+		var curviness = 0;
+		for(var i=1; i < Spoints.length-1 ; i++) {
+			delX = Spoints[i+1].x - Spoints[i].x;
+			delY = Spoints[i+1].y - Spoints[i].y;
+			delXprev = Spoints[i].x - Spoints[i-1].x;
+			delYprev = Spoints[i].y - Spoints[i-1].y;
+			// Math.atan2(y,x) takes care of corner cases for +Pi/2 & -Pi/2
+			var val = Math.atan2(delXprev*delY - delX*delYprev, delX*delXprev + delY*delYprev);
+			if (!isNaN(val) && Math.abs(val) < (19*Math.PI)/180) {
+				curviness += Math.abs(val);
+			}
+		}
+        return curviness;
+    }
+
+	function feature16L(sketch) {
+        return rotationF9/StrokelengthF8;
+    }
+
+	function feature17L(sketch) {
+        return StrokelengthF8/S2ElengthF5;
+    }
+
+	function feature18L(sketch) {
+        return StrokelengthF8/BBlengthF3;
+    }
+
+	function feature19L(sketch) {
+        return S2ElengthF5/BBlengthF3;
+    }
+	
+	var area = 0;
+	function feature20L(sketch) {
+        area = (maxX-minX)*(maxY-minY);
+		return area;
+    }
+
+	function feature21L(sketch) {
+        return Math.log(area);
+    }
+
+	function feature22L(sketch) {
+        return rotationF9/absRotationF10;
+    }
+
+	function feature23L(sketch) {
+        return Math.log(StrokelengthF8);
+    }
+
+	function feature24L(sketch) {
+        return Math.log(feature14L(sketch));
+    }
 
 
 
@@ -296,7 +364,7 @@
 
     function getSketch() {
     	if (counter == sketchIds.length || counter == maxResults) { // Reached the last sketch.
-			//saveCSV(); 
+			saveCSV(); 
 			return; 
 		} 
     	var id = sketchIds[counter];
