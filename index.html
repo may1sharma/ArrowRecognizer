@@ -16,10 +16,20 @@
 
     // The interpretation will automatically be added to each row of csv data for you.
     // Place the function names to calculate your features here. The function name will be the header of the csv file for that row.
-    featureFunctions = [ //Format: "feature"+id+{R:Rubine,L:Long,M:Mine} 
+    featureFunctions = [ //Format: "feature"+id+{R:Rubine,L:Long,O:Others} 
 						feature1R, // cosine of starting angle
-						feature2R // sine of starting angle
-						//feature3R
+						feature2R, // sine of starting angle
+						feature3R, // Length of Bounding Box Diagonal
+						feature4R, // Angle of Bounding Box Diagonal
+						feature5R, // Start and Endpoint Distance
+						feature6R, // cosine of Angle from Start to Endpoint
+						feature7R, // sine of Angle from Start to Endpoint
+						feature8R, // Stroke Length
+						feature9R, // Total rotational change in a stroke
+						feature10R,// Absolute rotational change in a stroke
+						feature11R,// Smoothness/ Squared rotational change of the stroke.
+						feature12R,// Maximum speed
+						feature13R // Total Time
 						];
 
     
@@ -34,43 +44,187 @@
 			shapes: [{interpretation: string}], // Shapes should only have 1 entry and the interpretation is all you care about. Either arrow or something else
 			strokes: [{id: string, time: string, points: [pointId1, pointId2, ...]}, ...]
 		}
-		*/
-    
-	function feature1R(sketch) {
-        console.log(sketch.points[sketch.strokes[0].points[0]]); 
-		var i = 2;
-		var point0 = sketch.points[sketch.strokes[0].points[0]];		
-		var point2 = sketch.points[sketch.strokes[0].points[i]];
+	*/
+	
+	var Spoints = []; //Sampled points
+	var BBlengthF3 = 0; // Length of Bounding Box
+	var minX = Number.MAX_VALUE;
+	var minY = Number.MAX_VALUE;
+	var maxX = Number.MIN_VALUE;
+	var maxY = Number.MIN_VALUE;
+	var S2ElengthF5 = 0; // Start to Endpoint distance	
+	var StrokelengthF8 = 0;
+	var absRotationF10 = 0;
+	var sqRotationF11 = 0;
 		
-		while((parseInt(point2.time) <= parseInt(point0.time)) || ((point0.x == point2.x) && (point0.y == point2.y))) {
-			point2 = sketch.points[sketch.strokes[0].points[++i]];
+	function preProcess(sketch) {
+		// find resample spacing or distance
+		var S = calculateRD(sketch.points);
+		console.log("Resampling Distance = " + S);
+		
+		// resample the points and store them sequentially
+		resample(sketch, S);
+		console.log(Spoints);
+		//console.log(sketch.points);
+	}
+	
+	function calculateRD(points) { //Resampling Distance		
+		for (var key in points) {
+			if (points.hasOwnProperty(key)) {
+				var val = points[key];
+				//console.log(val);
+				if (minX > val.x) minX = val.x;
+				if (minY > val.y) minY = val.y;
+				if (maxX < val.x) maxX = val.x;
+				if (maxY < val.y) maxY = val.y;
+			}
 		}
-		x0 = point0.x;
-		y0 = point0.y;
-		x2 = point2.x;
-		y2 = point2.y;
+		
+		BBlengthF3 = Math.sqrt((maxY-minY)*(maxY-minY) + (maxX-minX)*(maxX-minX));
+		// Divide bounding box diagonal length by empirical factor 40
+		return BBlengthF3/40.0;
+	}
+    
+	function resample(sketch, S) {
+		var D = 0;
+		Spoints = []; // reinitialize for each sketch
+		var prevX = sketch.points[sketch.strokes[0].points[0]].x;
+		var prevY = sketch.points[sketch.strokes[0].points[0]].y;
+		Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}')); //Initial point
+		var val;
+		for (var key in sketch.points) {
+			if (sketch.points.hasOwnProperty(key)) {
+				val = sketch.points[key];
+				D = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));
+				if (D >= S) {
+					prevX = prevX + (val.x - prevX)*(S/D);
+					prevY = prevY + (val.y - prevY)*(S/D);
+					Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}'));
+				}
+			}
+		}
+		// Insert Last point 
+		Spoints.push(JSON.parse('{ "x":' + val.x + ', "y":' + val.y +'}'));
+	}
+	
+	function feature1R(sketch) {
+		x0 = Spoints[0].x;
+		y0 = Spoints[0].y;
+		x2 = Spoints[1].x;
+		y2 = Spoints[1].y;
 				
 		return (x2-x0)/Math.sqrt((y2-y0)*(y2-y0) + (x2-x0)*(x2-x0));
 	}
 
 	function feature2R(sketch) {
-		var i = 2;
-		var point0 = sketch.points[sketch.strokes[0].points[0]];		
-		var point2 = sketch.points[sketch.strokes[0].points[i]];
-		
-		while((parseInt(point2.time) <= parseInt(point0.time)) || ((point0.x == point2.x) && (point0.y == point2.y))) {
-			point2 = sketch.points[sketch.strokes[0].points[++i]];
-		}
-		x0 = point0.x;
-		y0 = point0.y;
-		x2 = point2.x;
-		y2 = point2.y;
+		x0 = Spoints[0].x;
+		y0 = Spoints[0].y;
+		x2 = Spoints[1].x;
+		y2 = Spoints[1].y;
 				
 		return (y2-y0)/Math.sqrt((y2-y0)*(y2-y0) + (x2-x0)*(x2-x0));
 	}
     
-    function myFeature(sketch) {
-        return 3;
+    function feature3R(sketch) {
+        return BBlengthF3;
+    }
+    
+    function feature4R(sketch) {
+        return Math.atan2(maxY-minY, maxX-minX);
+    }
+    
+    function feature5R(sketch) {
+		x0 = Spoints[0].x;
+		y0 = Spoints[0].y;
+		// Last Point X_(n-1), Y_(n-1)
+		xL = Spoints[Spoints.length - 1].x;
+		yL = Spoints[Spoints.length - 1].y;
+        S2ElengthF5 = Math.sqrt((yL-y0)*(yL-y0) + (xL-x0)*(xL-x0));
+		return S2ElengthF5;
+    }
+    
+    function feature6R(sketch) {
+		x0 = Spoints[0].x;
+		// Last Point X_(n-1), Y_(n-1)
+		xL = Spoints[Spoints.length - 1].x;
+        return (xL -x0)/S2ElengthF5;
+    }
+    
+    function feature7R(sketch) {
+		y0 = Spoints[0].y;
+		yL = Spoints[Spoints.length - 1].y;
+        return (yL -y0)/S2ElengthF5;
+    }
+    
+    function feature8R(sketch) {
+		var prevX = sketch.points[sketch.strokes[0].points[0]].x;
+		var prevY = sketch.points[sketch.strokes[0].points[0]].y;
+		for (var key in sketch.points) {
+			if (sketch.points.hasOwnProperty(key)) {
+				var val = sketch.points[key];
+				StrokelengthF8 = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));				
+				prevX = val.x;
+				prevY = val.y;				
+			}
+		}
+        return StrokelengthF8;
+    }
+    	
+    function feature9R(sketch) {	
+		var rotation = 0;
+		for(var i=1; i < Spoints.length-1 ; i++) {
+			delX = Spoints[i+1].x - Spoints[i].x;
+			delY = Spoints[i+1].y - Spoints[i].y;
+			delXprev = Spoints[i].x - Spoints[i-1].x;
+			delYprev = Spoints[i].y - Spoints[i-1].y;
+			// Math.atan2(y,x) takes care of corner cases for +Pi/2 & -Pi/2
+			var val = Math.atan2(delXprev*delY - delX*delYprev, delX*delXprev + delY*delYprev);
+			if (!isNaN(val)) {
+				rotation += val;
+				absRotationF10 += Math.abs(val);
+				sqRotationF11 += Math.pow(val,2);
+			}
+		}
+        return rotation;
+    }
+    
+    function feature10R(sketch) {
+        return absRotationF10;
+    }
+    
+    function feature11R(sketch) {
+        return sqRotationF11;
+    }
+    
+	var totalTime = 0;
+	
+    function feature12R(sketch) {
+        var prevX = sketch.points[sketch.strokes[0].points[0]].x;
+		var prevY = sketch.points[sketch.strokes[0].points[0]].y;
+		var prevT = sketch.points[sketch.strokes[0].points[0]].time;
+		var maxSpeed = 0;
+		for (var key in sketch.points) {
+			if (sketch.points.hasOwnProperty(key)) {
+				var val = sketch.points[key];
+				if (val.time > prevT) {
+					var speed = (Math.pow(val.x - prevX, 2) + Math.pow(val.y - prevY, 2))/ Math.pow(val.time - prevT, 2);
+					if (speed > maxSpeed) {
+						maxSpeed = speed;
+					}
+				} else {
+					console.log("F12: Max Speed Feature anomaly T(i) "+ val.time + " & T(i-1) " + prevT);
+				}
+				prevX = val.x;
+				prevY = val.y;	
+				prevT = val.time;
+			}
+		}
+		totalTime = prevT - sketch.points[sketch.strokes[0].points[0]].time;
+        return maxSpeed;
+    }
+    
+    function feature13R(sketch) {
+        return totalTime;
     }
 
 
@@ -106,6 +260,9 @@
 			row.push('other');
 		}
 
+		// Perform preprocessing on sketch points
+		preProcess(sketch);
+		
 		// Now just push back all the feature values in order.
 		//row.push(calculateFeatureA(sketch));
 		//row.push(calculateFeatureB(sketch));
@@ -120,6 +277,7 @@
 
 	function arrayToObj(array) {
         var obj = {}
+		//array.sort(function(a, b){return b.time - a.time});
         for (var i = 0; i < array.length; i++) {
             var val = array[i];
             var id = val.id;
@@ -146,7 +304,10 @@
     }
 
     function getSketch() {
-    	if (counter == sketchIds.length || counter == maxResults) { saveCSV(); return; } // Reached the last sketch.
+    	if (counter == sketchIds.length || counter == maxResults) { // Reached the last sketch.
+			//saveCSV(); 
+			return; 
+		} 
     	var id = sketchIds[counter];
     	counter++;
 		$.ajax({
@@ -155,8 +316,11 @@
 			dataType: 'json',
 			contentType: "application/json",
 			success: function(res) {
-				var sketch = res[0];
+				var sketch = res[0]; 
+				sketch.points.sort(function(a, b){return a.time - b.time});
+				console.log(sketch.points);
 				sketch.points = arrayToObj(sketch.points);
+				console.log(sketch.points[sketch.strokes[0].points[0]]);
 				document.getElementById('progress').textContent = 'Calculating features for sketch ' + counter + ' of ' + maxResults;
 				calculateFeatures(sketch);
 				getSketch();
