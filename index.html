@@ -12,7 +12,10 @@
 	<script type="text/javascript">
     // This max value for this is 20000. If you go above it, it will limit to 20000. There are 10k arrows and 10k not arrows.
     // I recommend starting small until all your features calculate correctly, because 20000 will take a few min to fetch and calculate.
-    maxResults = 10;
+    maxResults = 20000;
+	
+	//************* Turn 'selectSubset' variable to 'false' for evaluating ALL Features *************************************
+	var selectSubset = true;
 
     // The interpretation will automatically be added to each row of csv data for you.
     // Place the function names to calculate your features here. The function name will be the header of the csv file for that row.
@@ -40,7 +43,50 @@
 						feature21L,	//	Log(area)
 						feature22L,	//	Total angle / total absolute angle [F9 / F10]
 						feature23L,	//	Log(total length)
-						feature24L	//	Log(aspect)
+						feature24L,	//	Log(aspect)
+						feature25O,	//	Normalized Distance between Direction Extremes (NDDE)
+						feature26O,	//	Direction Change Ratio
+						feature27O,	//	Basic Arrows drawn having polyline feature
+						feature28O,	//	For multi-stroke sketch, Bounding Box length of Arrow Shaft / Total Bounding Box Length
+						feature29O,	//	Multiplication of number of Strokes and substrokes
+						feature30O,	//	Geometric similarity of arrow heads relative to shaft
+						feature31O	//	feature29 * feature30
+						];
+						
+						
+	// Creating separate array for selected features subset 
+	featureSubset = [ //Format: "feature"+id+{R:Rubine,L:Long,O:Others} 
+						//feature1R, 	//	cosine of starting angle
+						//feature2R,	// 	sine of starting angle
+						feature3R, 	// 	Length of Bounding Box Diagonal
+						//feature4R, 	// 	Angle of Bounding Box Diagonal
+						//feature5R, 	// 	Start and Endpoint Distance
+						//feature6R, 	// 	cosine of Angle from Start to Endpoint
+						//feature7R, 	// 	sine of Angle from Start to Endpoint
+						feature8R, 	// 	Stroke Length
+						feature9R, 	// 	Total rotational change in a stroke
+						feature10R,	// 	Absolute rotational change in a stroke
+						feature11R,	// 	Smoothness/ Squared rotational change of the stroke.
+						//feature12R,	// 	Maximum speed
+						//feature13R, // 	Total Time
+						//feature14L,	//	Aspect [abs(Pi/4 - F4)]
+						feature15L,	//	Curviness
+						feature16L,	//	Total angle traversed / total length
+						feature17L,	//	Density metric 1 [F8 / F5]
+						feature18L,	//	Density metric 2 [F8 / F3]
+						//feature19L,	//	Non-subjective openness [F5 / F3]
+						//feature20L,	//	Area of bounding box
+						//feature21L,	//	Log(area)
+						feature22L,	//	Total angle / total absolute angle [F9 / F10]
+						feature23L,	//	Log(total length)
+						//feature24L,	//	Log(aspect)
+						feature25O,	//	Modified Normalized Distance between Direction Extremes 
+						feature26O,	//	Direction Change Ratio
+						feature27O,	//	Basic Arrows drawn having polyline feature
+						feature28O,	//	For multi-stroke sketch, Bounding Box length of Arrow Shaft / Total Bounding Box Length
+						feature29O,	//	Multiplication of number of Strokes and substrokes
+						//feature30O,	//	Geometric similarity of arrow heads relative to shaft
+						//feature31O	//	feature29 * feature30
 						];
 
     
@@ -57,43 +103,239 @@
 		}
 	*/
 	
-	var Spoints = []; //Sampled points
-	var BBlengthF3 = 0; // Length of Bounding Box
+	var SStrokes = []; //Sampled strokes
 	var minX = Number.MAX_VALUE;
 	var minY = Number.MAX_VALUE;
 	var maxX = Number.MIN_VALUE;
 	var maxY = Number.MIN_VALUE;
+	// Storing Initial and Last points
+	var x0 = null, y0 = null, t0 = null, x2 = null, y2 = null, t2 = null, xL = null, yL = null, tL = null; 
+	var distance0_2 = 0;
+	var BBlengthF3 = 0; // Length of Bounding Box
+	var DAngleF4 = 0;
 	var S2ElengthF5 = 0; // Start to Endpoint distance	
 	var StrokelengthF8 = 0;
-	var rotationF9 = 0
+	var rotationF9 = 0;
 	var absRotationF10 = 0;
-	var sqRotationF11 = 0;
+	var sqRotationF11 = 0;	
+	var maxSpeedF12 = 0;
+	var aspectF14 = 0;
+	var curvinessF15 = 0;
+	var areaF20 = 0;
+	var minDirPoint = null;
+	var maxDirPoint = null;
+	var maxDirVal = Number.MIN_VALUE;
+	var minDirVal = Number.MAX_VALUE;
+	var DCRF26 = 0;
+	var maxStrokeBBlen = 0;
+	var Corners = [];
+	var subStrokeLenF29 = 0;
+	var similarityF30 = -1;
+	
 		
 	function preProcess(sketch) {
+		//console.log(sketch.id);
 		// find resample spacing or distance
-		var S = calculateRD(sketch.points);
-		console.log("Resampling Distance = " + S);
+		var S = calculateRD(sketch);
+		//console.log("Resampling Distance = " + S);
 		
 		// resample the points and store them sequentially
 		resample(sketch, S);
-		console.log(Spoints);
+		//console.log(SStrokes);
 		//console.log(sketch.points);
+		
+		//Feature 1 & 2
+		distance0_2 = Math.sqrt(Math.pow((y2-y0),2) + Math.pow((x2-x0),2))
+		
+		// Feature 3, 8 & 12 calculated already
+		
+		//Feature 4
+        DAngleF4 = Math.atan2(maxY-minY, maxX-minX);
+		
+		// Feature 5		
+        S2ElengthF5 = Math.sqrt((yL-y0)*(yL-y0) + (xL-x0)*(xL-x0));
+		
+		// Feature 9, 10, 11, 26 and Corners. All angular stuff
+		{
+			rotationF9 = 0;
+			absRotationF10 = 0;
+			sqRotationF11 = 0;
+			curvinessF15 = 0;
+			DCRF26 = 0;
+			Corners = [];
+			
+			minDirPoint = null;
+			maxDirPoint = null;
+			maxDirVal = Number.MIN_VALUE;
+			minDirVal = Number.MAX_VALUE;
+			
+			maxStrokeBBlen = 0;
+						
+			for (var s=0; s< SStrokes.length; s++) {
+				var Spoints = SStrokes[s];
+				var skip = Math.floor(Spoints.length/20);
+				var maxChangeDCR = Number.MIN_VALUE;
+				var avgChangeSumDCR = 0;
+				Corners.push(Spoints[0]);
+				
+				var xmin = Spoints[0].x;
+				var ymin = Spoints[0].y;
+				var xmax = Spoints[0].x;
+				var ymax = Spoints[0].y;
+				
+				for(var i=1; i < Spoints.length-1 ; i++) {
+					delX = Spoints[i+1].x - Spoints[i].x;
+					delY = Spoints[i+1].y - Spoints[i].y;
+					delXprev = Spoints[i].x - Spoints[i-1].x;
+					delYprev = Spoints[i].y - Spoints[i-1].y;
+					// Math.atan2(y,x) takes care of corner cases for +Pi/2 & -Pi/2
+					var val = Math.atan2(delXprev*delY - delX*delYprev, delX*delXprev + delY*delYprev);
+					var absval = Math.abs(val);
+					
+					if (!isNaN(val)) {
+						rotationF9 += val;
+						absRotationF10 += absval;
+						sqRotationF11 += Math.pow(val,2);
+						
+						if (absval < (19*Math.PI)/180) {
+							curvinessF15 += absval;
+						}
+						
+						//Direction Change Ratio cut off tail
+						if (i >= skip && i < Spoints.length - skip) {
+							if (maxChangeDCR < absval) 	maxChangeDCR = absval;
+							avgChangeSumDCR += absval;
+							
+							//Corners
+							if (absval > (20*Math.PI)/180) {
+								Corners.push(Spoints[i]);
+							}
+						}
+						
+						// Comparing for Stroke with max Bounding Box length
+						if (xmin > Spoints[i].x) xmin = Spoints[i].x;
+						if (ymin > Spoints[i].y) ymin = Spoints[i].y;
+						if (xmax < Spoints[i].x) xmax = Spoints[i].x;
+						if (ymax < Spoints[i].y) ymax = Spoints[i].y;
+					}
+				
+					// Direction extremes
+					var dir = Math.atan2(delYprev, delXprev);
+					if (minDirVal > dir) {
+						minDirVal = dir;
+						minDirPoint = Spoints[i];
+					}
+					if (maxDirVal < dir) {
+						maxDirVal = dir;
+						maxDirPoint = Spoints[i];
+					}
+				}
+				// Last Point
+				Corners.push(Spoints[i]);
+				
+				// Comparing Last Point for Stroke with max Bounding Box length
+				if (xmin > Spoints[i].x) xmin = Spoints[i].x;
+				if (ymin > Spoints[i].y) ymin = Spoints[i].y;
+				if (xmax < Spoints[i].x) xmax = Spoints[i].x;
+				if (ymax < Spoints[i].y) ymax = Spoints[i].y;
+						
+				// Direction extremes
+				var dir = Math.atan2(Spoints[i].y - Spoints[i-1].y, Spoints[i].x - Spoints[i-1].x);
+				if (minDirVal > dir) {
+					minDirVal = dir;
+					minDirPoint = Spoints[i];
+				}
+				if (maxDirVal < dir) {
+					maxDirVal = dir;
+					maxDirPoint = Spoints[i];
+				}
+				
+				// Calculate Stroke with max Bounding Box length
+				var bblen = Math.sqrt(Math.pow((ymax-ymin),2) + Math.pow((xmax-xmin),2));
+				if (maxStrokeBBlen < bblen) {
+					maxStrokeBBlen = bblen;
+				}
+				
+				if (avgChangeSumDCR) {
+					DCRF26 += (maxChangeDCR * (Spoints.length - 2*skip))/ avgChangeSumDCR;
+				}
+			}
+			
+			DCRF26 /= SStrokes.length; // Taking average over all the strokes
+		}
+		
+				
+		// Feature 14		
+        aspectF14 = Math.abs(Math.PI/4 - DAngleF4);
+		
+		// Feature 20		
+        areaF20 = (maxX-minX)*(maxY-minY);
+				
+		// Feature 29
+		if (sketch.substrokes.length) {
+			subStrokeLenF29 = sketch.strokes.length * sketch.substrokes.length;
+		} else {
+			subStrokeLenF29 = sketch.strokes.length;
+		}
+		
+		// Feature 30
+		if (Corners.length) {
+			var maxLen = Number.MIN_VALUE;
+			var end = 0; // Shaft End Index, start being 0.
+			var perpMax1 = Number.MIN_VALUE;
+			var perpMax2 = Number.MIN_VALUE;
+			var ah1 = 0;	//Arrow head 1
+			var ah2 = 0;	//Arrow head 2
+			
+			// Shaft Computation
+			for (var i=1; i<Corners.length; i++) {
+				var dis = Math.sqrt(Math.pow((Corners[i].y - Corners[0].y),2) + Math.pow((Corners[i].x - Corners[0].x),2));
+				if (maxLen < dis) {
+					maxLen = dis;
+					end = i;
+				}
+			}
+			
+			// Arrow heads computation
+			for (var i=1; i<Corners.length ; i++) {
+				var disPerp = ((Corners[end].y - Corners[0].y)*Corners[i].x - (Corners[end].x - Corners[0].x)*Corners[i].y 
+										+ Corners[end].x * Corners[0].y - Corners[end].y * Corners[0].x ) / maxLen;
+				
+				if ((Math.abs(disPerp) > Math.abs(perpMax1)) && (Math.abs(disPerp) > Math.abs(perpMax2))) {
+					perpMax2 = perpMax1;
+					ah2 = ah1;
+					perpMax1 = disPerp;
+					ah1 = i;
+				} else if (Math.abs(disPerp) > Math.abs(perpMax2)) {
+					perpMax2 = disPerp;
+					ah2 = i;
+				}
+			}
+			
+			// Similarity calculation
+			similarityF30 = Math.abs(
+					(perpMax1/ Math.sqrt(Math.pow((Corners[ah1].y - Corners[end].y),2) + Math.pow((Corners[ah1].x - Corners[end].x),2))) -
+					(perpMax2/ Math.sqrt(Math.pow((Corners[ah2].y - Corners[end].y),2) + Math.pow((Corners[ah2].x - Corners[end].x),2))) );
+		}
 	}
 	
-	function calculateRD(points) { //Resampling Distance
+	function calculateRD(sketch) { //Resampling Distance
 		minX = Number.MAX_VALUE;
 		minY = Number.MAX_VALUE;
 		maxX = Number.MIN_VALUE;
 		maxY = Number.MIN_VALUE;
-		for (var i=0; i<points.length; i++) {
-			var val = points[i];
-			//console.log(val);
-			if (minX > val.x) minX = val.x;
-			if (minY > val.y) minY = val.y;
-			if (maxX < val.x) maxX = val.x;
-			if (maxY < val.y) maxY = val.y;
+		for (var s=0; s< sketch.strokes.length; s++) {
+			for (var i=0; i<sketch.strokes[s].points.length; i++) {
+				var val = sketch.points[sketch.strokes[s].points[i]];
+				//console.log(val);
+				if(val) {
+					if (minX > val.x) minX = val.x;
+					if (minY > val.y) minY = val.y;
+					if (maxX < val.x) maxX = val.x;
+					if (maxY < val.y) maxY = val.y;
+				}
+			}
 		}
-		
 		BBlengthF3 = Math.sqrt((maxY-minY)*(maxY-minY) + (maxX-minX)*(maxX-minX));
 		// Divide bounding box diagonal length by empirical factor 40
 		return BBlengthF3/40.0;
@@ -101,40 +343,93 @@
     
 	function resample(sketch, S) {
 		var D = 0;
-		Spoints = []; // reinitialize for each sketch
-		var prevX = sketch.points[0].x;
-		var prevY = sketch.points[0].y;
-		Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}')); //Initial point
-		var val;
-		for (var i=1; i<sketch.points.length; i++) {
-			val = sketch.points[i];
-			D = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));
-			if (D >= S) {
-				prevX = prevX + (val.x - prevX)*(S/D);
-				prevY = prevY + (val.y - prevY)*(S/D);
-				Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY +'}'));
+		SStrokes = []; // reinitialize for each sketch
+		x0 = null, y0 = null, t0 = null, x2 = null, y2 = null, t2 = null, xL = null, yL = null, tL = null; // nullify these values for each sketch		
+		StrokelengthF8 = 0;
+		maxSpeedF12 = 0;
+		
+		//reorder stroke array based on time stamp of first point
+		sketch.strokes.sort(function(a, b){
+			if (sketch.points[a.points[0]] && sketch.points[b.points[0]]) {
+				return sketch.points[a.points[0]].time - sketch.points[b.points[0]].time;
+			} else {
+				return 0;
+			}
+		});
+		
+		for (var s=0; s< sketch.strokes.length; s++) {
+			if (sketch.strokes[s].points.length) {
+				var Spoints = []; 
+				var prevX = sketch.points[sketch.strokes[s].points[0]].x;
+				var prevY = sketch.points[sketch.strokes[s].points[0]].y;
+				var prevT = sketch.points[sketch.strokes[s].points[0]].time;
+				if(!x0) {
+					x0 = prevX;
+					y0 = prevY;
+					t0 = prevT;
+				}
+				if (!x2 && sketch.strokes[s].points[2]) {
+					x2 = sketch.points[sketch.strokes[s].points[2]].x;
+					y2 = sketch.points[sketch.strokes[s].points[2]].y;
+					t2 = sketch.points[sketch.strokes[s].points[2]].time;
+				}
+				
+				Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY + ', "t":' + prevT +'}')); //Initial point
+				var val = null;
+				for (var i=1; i<sketch.strokes[s].points.length; i++) {
+					val = sketch.points[sketch.strokes[s].points[i]];
+					if(val) {
+						if (!x2) {
+							x2 = val.x;
+							y2 = val.y;
+							t2 = val.time;
+						}
+						D = Math.sqrt((val.y-prevY)*(val.y-prevY) + (val.x-prevX)*(val.x-prevX));
+						//Resample if this point is beyond interspacing distance
+						if (D >= S) {
+							prevX = prevX + (val.x - prevX)*(S/D);
+							prevY = prevY + (val.y - prevY)*(S/D);
+							prevT = val.time;						
+							Spoints.push(JSON.parse('{ "x":' + prevX + ', "y":' + prevY + ', "t":' + prevT +'}'));
+						}
+						
+						var pval = sketch.points[sketch.strokes[s].points[i-1]];
+						if (pval) {
+							// Calculate Stroke Length
+							StrokelengthF8 += Math.sqrt((val.y-pval.y)*(val.y-pval.y) + (val.x-pval.x)*(val.x-pval.x));	
+							
+							// Calculate max Speed
+							if (val.time > pval.time) {
+								var speed = (Math.pow(val.x - pval.x, 2) + Math.pow(val.y - pval.y, 2))/ Math.pow(val.time - pval.time, 2);
+								if (speed > maxSpeedF12) {
+									maxSpeedF12 = speed;
+								}
+							} else {
+								//console.log("F12: Max Speed Feature anomaly T(i) "+ val.time + " & T(i-1) " + pval.time);
+							}
+						}
+					}
+				}
+				// Insert Last point 
+				if(val){
+					xL = val.x;
+					yL = val.y;
+					tL = val.time;
+					Spoints.push(JSON.parse('{ "x":' + val.x + ', "y":' + val.y + ', "t":' + val.time +'}'));
+				}
+				if (Spoints.length) {
+					SStrokes.push(Spoints);
+				}
 			}
 		}
-		// Insert Last point 
-		Spoints.push(JSON.parse('{ "x":' + val.x + ', "y":' + val.y +'}'));
 	}
 	
 	function feature1R(sketch) {
-		x0 = Spoints[0].x;
-		y0 = Spoints[0].y;
-		x2 = Spoints[1].x;
-		y2 = Spoints[1].y;
-				
-		return (x2-x0)/Math.sqrt((y2-y0)*(y2-y0) + (x2-x0)*(x2-x0));
+		return (x2-x0)/distance0_2;
 	}
 
 	function feature2R(sketch) {
-		x0 = Spoints[0].x;
-		y0 = Spoints[0].y;
-		x2 = Spoints[1].x;
-		y2 = Spoints[1].y;
-				
-		return (y2-y0)/Math.sqrt((y2-y0)*(y2-y0) + (x2-x0)*(x2-x0));
+		return (y2-y0)/distance0_2;				
 	}
     
     function feature3R(sketch) {
@@ -142,59 +437,26 @@
     }
     
     function feature4R(sketch) {
-        return Math.atan2(maxY-minY, maxX-minX);
+		return DAngleF4;
     }
     
     function feature5R(sketch) {
-		x0 = Spoints[0].x;
-		y0 = Spoints[0].y;
-		// Last Point X_(n-1), Y_(n-1)
-		xL = Spoints[Spoints.length - 1].x;
-		yL = Spoints[Spoints.length - 1].y;
-        S2ElengthF5 = Math.sqrt((yL-y0)*(yL-y0) + (xL-x0)*(xL-x0));
 		return S2ElengthF5;
     }
     
     function feature6R(sketch) {
-		x0 = Spoints[0].x;
-		// Last Point X_(n-1), Y_(n-1)
-		xL = Spoints[Spoints.length - 1].x;
         return (xL -x0)/S2ElengthF5;
     }
     
     function feature7R(sketch) {
-		y0 = Spoints[0].y;
-		yL = Spoints[Spoints.length - 1].y;
         return (yL -y0)/S2ElengthF5;
     }
     
     function feature8R(sketch) {
-		StrokelengthF8 = 0;
-		for (var i=1; i<sketch.points.length; i++) {
-			var val = sketch.points[i];
-			var prev = sketch.points[i-1];
-			StrokelengthF8 += Math.sqrt((val.y-prev.y)*(val.y-prev.y) + (val.x-prev.x)*(val.x-prev.x));	
-		}
         return StrokelengthF8;
     }
     	
     function feature9R(sketch) {	
-		rotationF9 = 0;
-		absRotationF10 = 0;
-		sqRotationF11 = 0;
-		for(var i=1; i < Spoints.length-1 ; i++) {
-			delX = Spoints[i+1].x - Spoints[i].x;
-			delY = Spoints[i+1].y - Spoints[i].y;
-			delXprev = Spoints[i].x - Spoints[i-1].x;
-			delYprev = Spoints[i].y - Spoints[i-1].y;
-			// Math.atan2(y,x) takes care of corner cases for +Pi/2 & -Pi/2
-			var val = Math.atan2(delXprev*delY - delX*delYprev, delX*delXprev + delY*delYprev);
-			if (!isNaN(val)) {
-				rotationF9 += val;
-				absRotationF10 += Math.abs(val);
-				sqRotationF11 += Math.pow(val,2);
-			}
-		}
         return rotationF9;
     }
     
@@ -207,45 +469,19 @@
     }
 	
     function feature12R(sketch) {
-        var prev = sketch.points[0];
-		var maxSpeed = 0;
-		for (var i=1; i<sketch.points.length; i++) {
-				var val = sketch.points[i];
-				if (val.time > prev.time) {
-					var speed = (Math.pow(val.x - prev.x, 2) + Math.pow(val.y - prev.y, 2))/ Math.pow(val.time - prev.time, 2);
-					if (speed > maxSpeed) {
-						maxSpeed = speed;
-					}
-				} else {
-					//console.log("F12: Max Speed Feature anomaly T(i) "+ val.time + " & T(i-1) " + prev.time);
-				}
-				prev = val;
-		}
-        return maxSpeed;
+        return maxSpeedF12;
     }
     
     function feature13R(sketch) {
-        return sketch.points[sketch.points.length-1].time - sketch.points[0].time;
+        return tL - t0;
     }
 
 	function feature14L(sketch) {
-        return Math.abs(Math.PI/4 - feature4R(sketch));
+		return aspectF14;
     }
 
 	function feature15L(sketch) {
-		var curviness = 0;
-		for(var i=1; i < Spoints.length-1 ; i++) {
-			delX = Spoints[i+1].x - Spoints[i].x;
-			delY = Spoints[i+1].y - Spoints[i].y;
-			delXprev = Spoints[i].x - Spoints[i-1].x;
-			delYprev = Spoints[i].y - Spoints[i-1].y;
-			// Math.atan2(y,x) takes care of corner cases for +Pi/2 & -Pi/2
-			var val = Math.atan2(delXprev*delY - delX*delYprev, delX*delXprev + delY*delYprev);
-			if (!isNaN(val) && Math.abs(val) < (19*Math.PI)/180) {
-				curviness += Math.abs(val);
-			}
-		}
-        return curviness;
+        return curvinessF15;
     }
 
 	function feature16L(sketch) {
@@ -253,6 +489,7 @@
     }
 
 	function feature17L(sketch) {
+	
         return StrokelengthF8/S2ElengthF5;
     }
 
@@ -264,27 +501,94 @@
         return S2ElengthF5/BBlengthF3;
     }
 	
-	var area = 0;
 	function feature20L(sketch) {
-        area = (maxX-minX)*(maxY-minY);
-		return area;
+		return areaF20;
     }
 
 	function feature21L(sketch) {
-        return Math.log(area);
+		if (areaF20 == 0) {
+			return Number.MIN_VALUE;
+		} else {
+			return Math.log(areaF20);
+		}
     }
 
 	function feature22L(sketch) {
-        return rotationF9/absRotationF10;
+		if (absRotationF10 == 0) {
+			return Number.MAX_VALUE;
+		} else {
+			return rotationF9/absRotationF10;
+		}
     }
 
 	function feature23L(sketch) {
-        return Math.log(StrokelengthF8);
+		if (StrokelengthF8 == 0) {
+			return Number.MIN_VALUE;
+		} else {
+			return Math.log(StrokelengthF8);
+		}        
     }
 
 	function feature24L(sketch) {
-        return Math.log(feature14L(sketch));
+		if (aspectF14 == 0) {
+			return Number.MIN_VALUE;
+		} else {
+			return Math.log(aspectF14);
+		} 
     }
+	
+	function feature25O(sketch) {
+		if (minDirPoint && maxDirPoint) {
+			var calcStroke = false;
+			var nddeStrokeLen = 0;
+			for (var s=0; s< SStrokes.length; s++) {
+				var Spoints = SStrokes[s];
+				for(var i=1; i < Spoints.length ; i++) {
+					var val = Spoints[i];					
+					if(calcStroke) {
+						var pval = Spoints[i-1];
+						nddeStrokeLen += Math.sqrt(Math.pow((val.y - pval.y),2) + Math.pow((val.x - pval.x),2));	
+					}
+					if ((JSON.stringify(minDirPoint) == JSON.stringify(val)) ||
+						(JSON.stringify(maxDirPoint) == JSON.stringify(val)) ) {
+						calcStroke = !calcStroke;
+					}
+				}				
+			}
+			return nddeStrokeLen/StrokelengthF8;
+		} else {
+			return -1;
+		}
+	}
+	
+	function feature26O(sketch) {
+		return DCRF26;
+	}
+	
+	function feature27O(sketch) {
+		return DCRF26*S2ElengthF5/StrokelengthF8;
+	}
+	
+	function feature28O(sketch) {
+		//Only for multiple strokes
+		//if (SStrokes.length < 2) {
+		//	return -1;
+		//} else {
+			return maxStrokeBBlen/BBlengthF3;
+		//}
+	}
+	
+	function feature29O(sketch) {
+		return subStrokeLenF29;
+	}
+	
+	function feature30O(sketch) {
+		return similarityF30;		
+	}
+	
+	function feature31O(sketch) {
+		return subStrokeLenF29 * similarityF30;		
+	}
 
 
 
@@ -300,35 +604,54 @@
     
     // Begin processing once webpage loaded
 	$(document).ready(function() {
-        features = [['interpretation']];
+        features = [[]];
 		// DO NOT REMOVE THESE LINES
-        for (var i = 0; i < featureFunctions.length; i++) {
-            var f = featureFunctions[i];
-            features[0].push(f.name);
-        }
+		if (selectSubset){
+			// For Subset Features
+			for (var i = 0; i < featureSubset.length; i++) {
+				var f = featureSubset[i];
+				features[0].push(f.name);
+			}
+		} else {
+			// For All Features
+			for (var i = 0; i < featureFunctions.length; i++) {
+				var f = featureFunctions[i];
+				features[0].push(f.name);
+			}
+		}
+		features[0].push('interpretation');
+				
         getSketchIds();
 	});
     
     function calculateFeatures(sketch) {
 		var row = [];
+
+		// Perform preprocessing on sketch points
+		//console.log(sketch.points);
+		preProcess(sketch);
+		
+		// Now just push back all the feature values in order.		
+		if (selectSubset){
+			// For Subset Features
+			for (var i = 0; i < featureSubset.length; i++) {
+				var f = featureSubset[i];
+				row.push(f(sketch));
+			}
+		} else {
+			// For All Features
+			for (var i = 0; i < featureFunctions.length; i++) {
+				var f = featureFunctions[i];
+				row.push(f(sketch));
+			}
+
+		}
+		
 		if (sketch.shapes[0].interpretation == 'arrow') {
 			row.push('arrow');
 		} else {
 			row.push('other');
 		}
-
-		// Perform preprocessing on sketch points
-		sketch.points.sort(function(a, b){return a.time - b.time});
-		console.log(sketch.points);
-		preProcess(sketch);
-		
-		// Now just push back all the feature values in order.
-		//row.push(calculateFeatureA(sketch));
-		//row.push(calculateFeatureB(sketch));
-        for (var i = 0; i < featureFunctions.length; i++) {
-            var f = featureFunctions[i];
-            row.push(f(sketch));
-        }
 
 		// Finally push the row to the overall features array.
 		features.push(row);
@@ -336,7 +659,6 @@
 
 	function arrayToObj(array) {
         var obj = {}
-		//array.sort(function(a, b){return b.time - a.time});
         for (var i = 0; i < array.length; i++) {
             var val = array[i];
             var id = val.id;
@@ -353,9 +675,12 @@
     		csvRows.push(features[i].join(','));
     	}
 
-    	var csvString = csvRows.join('%0A');
+    	var csvString = csvRows.join('\n');
+        var csvData = new Blob([csvString], { type: 'text/csv' });
+        var csvURL = URL.createObjectURL(csvData);
     	var a = document.createElement('a');
-    	a.href = 'data:attachment/csv,' + csvString;
+		
+    	a.href = csvURL;
     	a.target = '_blank';
     	a.download = 'features.csv';
     	document.body.appendChild(a);
@@ -376,7 +701,15 @@
 			contentType: "application/json",
 			success: function(res) {
 				var sketch = res[0]; 
-				//sketch.points = arrayToObj(sketch.points);
+				
+				// Visualizing the data
+				//var visual = counter + " ";
+				//sketch.points.forEach(function(point) {
+				//	visual += "("+point.x+", "+ point.y+")";
+				//});
+				//console.log(visual);
+				
+				sketch.points = arrayToObj(sketch.points);
 				document.getElementById('progress').textContent = 'Calculating features for sketch ' + counter + ' of ' + maxResults;
 				calculateFeatures(sketch);
 				getSketch();
