@@ -16,5 +16,8 @@ can be processed in "Weka" tool for classification purposes.
 Recognizer to determine if a gesture or sketch is an arrow or not.
 This project runs on an internal server which is not accessible without VPN.
 
+# Training
+The arrow recognizer has been trained for 20,000 sketches with 10,000 arrows.
+
 # Developed by
 Mayank Sharma (mayank.sharma@tamu.edu)
