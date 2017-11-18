@@ -21,3 +21,7 @@ The arrow recognizer has been trained for 20,000 sketches with 10,000 arrows.
 
 # Developed by
 Mayank Sharma (mayank.sharma@tamu.edu)
+
+# Guidance
+Dr. Tracy Hammond (srl.tamu.edu)
+Paul Taele
