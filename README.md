@@ -1,5 +1,5 @@
 *******************************************************************************
-********************************README*****************************************
+********************************README********************************
 *******************************************************************************
 
 # How to RUN
@@ -23,5 +23,6 @@ The arrow recognizer has been trained for 20,000 sketches with 10,000 arrows.
 Mayank Sharma (mayank.sharma@tamu.edu)
 
 # Guidance
-Dr. Tracy Hammond (srl.tamu.edu)
+Dr. Tracy Hammond (http://srl.tamu.edu)
+
 Paul Taele
